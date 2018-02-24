@@ -1,0 +1,243 @@
+import paramiko
+import threading
+import os.path
+import subprocess
+import time
+import sys
+import re
+import os
+import ipaddress
+import socket
+import networkx as nx
+import matplotlib.pyplot as plt
+
+FNULL = open(os.devnull, 'w')
+
+#Check password file validity
+def pass_is_valid():
+  global pass_dictionary
+  pass_dictionary = []
+  while True:
+    print '*Choose passwords file:'
+    print '\n1. Use password.txt in current directory'
+    print '2. Choose different file'
+    user_input = raw_input('\n# Type 1 or 2: ')
+    if user_input == '2' : pass_file = raw_input("\n# Enter pass file name and extension: ")
+    elif user_input == '1': pass_file = 'password.txt'
+
+    if os.path.isfile(pass_file) == True:
+      print "\n* Password file has been validated.\n"
+      break
+
+    else:
+      print "\n* File %s does not exist! Please check and try again!\n" % pass_file
+      continue
+  open_pass_file = open(pass_file, 'r')
+
+#Create dictionary with all passwords from file
+  for line in open_pass_file: pass_dictionary.append(line.strip('\n'))
+#Remove blank passwords
+  pass_dictionary = filter(None, pass_dictionary)
+#Remove diplicate entries
+  pass_dictionary = list(set(pass_dictionary))
+		
+#Check IP range file validity
+def ip_is_valid():
+    check = False
+    global valid_ip
+    global blacklist
+    network_list = []
+    valid_ip = []
+    blacklist = []
+    while True:
+			print '* Choose IP networks file:'
+			print '\n1. Use range.txt in current directory.'
+			print '2. Choose different file.'
+			user_input = raw_input('\n# Type 1 or 2: ')
+			if user_input == '2' : range_file = raw_input("\n# Enter pass file name and extension: ")
+			elif user_input == '1': range_file = 'range.txt'
+
+			if os.path.isfile(range_file) == True: print "\n* Password file has been validated.\n"
+			else:
+				print "\n* File %s does not exist! Please check and try again!\n" % range_file
+				continue
+
+			#Checking octets
+			o_range_file = open(range_file, 'r')
+			o_range_file.seek(0)
+			for line in o_range_file:
+				network_list.extend(line.strip('\n').split(','))
+			check = True
+#Check reachable IP addresses
+			for network in network_list:
+				try:
+					a = list(ipaddress.ip_network(network).hosts())
+					for ip in a:
+						try:
+							ping_reply = subprocess.check_call(['ping', '-c', '2', '-w', '2', '-q', '-n', str(ip)],stdout=FNULL, stderr=FNULL )
+						except subprocess.CalledProcessError:
+							ping_reply = None
+						if ping_reply is 0:
+							valid_ip.append(str(ipaddress.IPv4Address(ip)))
+				except ValueError:
+					print '\n* There was an INVALID IP address! Please check and try again!\n'
+					check = False
+					break
+			#Evaluating the 'check' flag
+			if check == False:
+				continue
+			check = True
+			if check == True:
+				break
+
+#Check correct passwords for valid IP addresses
+def check_ssh_conn(ip, code = 0):
+	#username = 'admin'
+	for passw in pass_dictionary:
+		try:
+			session = paramiko.SSHClient()
+			session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+			#print "For " + ip + " trying password: " + passw + '\n'
+			session.connect(ip, username = 'teopy', password = passw)
+			connection = session.invoke_shell()
+		except paramiko.AuthenticationException:
+			code = 1			
+		except socket.error as e:
+			code = 2
+			blacklist.append(ip)
+		session.close()
+		if code == 0: correct_passwords[ip] = passw
+
+#Create SSH connection, send commands and extract necessary information
+def open_ssh_con(ip, i):
+		try:         
+			session = paramiko.SSHClient()
+                        session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                        session.connect(ip, username = 'teopy', password = correct_passwords[ip])
+                        connection = session.invoke_shell()
+                        connection.send('terminal length 0\n')
+                        time.sleep(1)
+                        connection.send('\n')
+                        connection.send('show inventory\n')
+                        time.sleep(2)
+			connection.send('show hardware | begin processor\n')
+			time.sleep(1)
+			connection.send('show hardware | include Software\n')
+			time.sleep(1)
+			connection.send('show interface description\n')
+			time.sleep(1)
+			connection.send('show cdp neighbor\n')
+			time.sleep(1)
+                        router_output = connection.recv(65535)
+			devices['device' + str(i)]['name'] = re.search('(.+)#',router_output).group(1)
+			devices['device' + str(i)]['hw_info'] = re.search('((.*\n){3})\d+\s\w+', router_output).group(1).strip('\r')
+			devices['device' + str(i)]['sw_info'] = re.search('Software\r\n(.*)', router_output).group(1).strip('\r')
+			devices['device' + str(i)]['password'] = correct_passwords[ip]
+			devices['device' + str(i)]['modules'] = re.findall('(NAME.*\r\nPID.*)', router_output)
+			devices['device' + str(i)]['ports'] = re.search('description\r\n((.*\n)+?).*#', router_output).group(1).replace(devices['device' + str(i)]['name'] + '#','')
+                        neighbor = re.search('ID\r\n((.*\n)+)', router_output).group(1)
+			devices['device' + str(i)]['neighbors'] = [devices['device' + str(i)]['name'], list(re.findall('(.*)\.', neighbor))]
+			#print router_output + '\n'
+
+		except paramiko.AuthenticationException:
+                        print '** Authentication Error sending the commands **'
+                #except socket.error, e:
+			#print 'Host down error sending the command **'
+                session.close()
+
+try:
+    #Calling user file validity function    
+    pass_is_valid()
+    
+except KeyboardInterrupt:
+    print "\n\n* Program aborted by user. Exiting...\n"
+    sys.exit()
+
+try:
+    #Calling IP validity function    
+    ip_is_valid()
+    
+except KeyboardInterrupt:
+    print "\n\n* Program aborted by user. Exiting...\n"
+    sys.exit()
+		
+
+correct_passwords = {}
+print '* Trying passwords from dictionary for reachable IP addresses.\n'
+for ip in valid_ip:
+	check_ssh_conn(ip)
+
+#Remove valid IP addresses if SSH fails (removes host PCs)
+devices = {}
+for ip in blacklist:
+	if ip in valid_ip: valid_ip.remove(ip)
+
+#Create dictionary with the information for every device
+neighbour = []
+for i, ip in enumerate(valid_ip):
+	devices.update({'device'+str(i):{'name':'', 'mgmt_ip':ip,'password':'','hw_info':'','sw_info':'','modules':'','ports':'', 'neighbors':''}})
+	open_ssh_con(ip, i)
+	neighbour.append(devices['device' + str(i)]['neighbors'])
+
+#Create output .txt file with the information for all devices
+while True:
+	print '\n* Choose output directory:\n'
+	user_input = raw_input('1. Create output.txt in current folder.\n2. Choose destination name.\n\n# Type 1 or 2:\n')
+	if user_input is '1': output_file = open('output.txt', 'w')
+	elif user_input is '2':
+		dst = raw_input('\n# Enter destination name:') 
+		output_file = open(dst, 'w')
+	else: continue
+	
+	for dev in devices:
+		output_file.write('* Device Name: ' +  devices[dev]['name'] + '\n')
+        	output_file.write('* Device IP: '+  devices['device' + str(i)]['mgmt_ip'] + '\n')
+	       	output_file.write('* Device Password: ' +  devices['device' + str(i)]['password'] + '\n')
+        	output_file.write('* Hardware Info: \n' + devices['device' + str(i)]['hw_info']  + '\n')
+  	     	output_file.write('* Software Info: \n' + devices['device' + str(i)]['sw_info'] + '\n')
+        	output_file.write('* Modules: \n' + '\n'.join(devices['device' + str(i)]['modules']) + '\n')
+        	output_file.write('* Ports: \n' + devices['device' + str(i)]['ports'] + '\n')
+		output_file.write('===================================================================\n\n')
+        	#print  devices['device' + str(i)]['neighbors']
+	output_file.close()
+
+	print('\n* Info for all devices printed to text file.\n')
+	break
+
+#Prompt user to print information for specific device	
+while True:
+	print '\n* Choose option:\n'
+	user_input = raw_input('-Type exit to skip displaying info.\n-Type list to list all devices\n-Type device name to print all info about the device\n\n#')
+	if user_input == 'exit': break
+	if user_input == 'list': 
+		for dev in devices: 
+			print('\nDevice: ' + devices[dev]['name'] + ' with IP: ' + devices[dev]['mgmt_ip']) 
+	else:
+		for dev in devices:
+			if devices[dev]['name'] == user_input:
+				print '* Device Name: ' +  devices[dev]['name'] + '\n'
+				print '* Device IP: '+  devices[dev]['mgmt_ip'] + '\n'
+				print '* Device Password: ' +  devices[dev]['password'] + '\n'
+				print '* Hardware Info: \n' + devices[dev]['hw_info']  + '\n'
+				print '* Software Info: \n' + devices[dev]['sw_info'] + '\n'
+				print '* Modules: \n' + '\n'.join(devices[dev]['modules']) + '\n'
+				print '* Ports: \n' + devices[dev]['ports'] + '\n'
+
+#Create image of network topology
+G = nx.Graph()
+neighborship_dict={}
+for router in neighbour:
+    for router_second in neighbour:
+        if router_second==router:
+            continue
+        if router[0] in router_second[1]:
+            G.add_edge(router[0],router_second[0])
+
+G.add_edges_from(neighborship_dict.keys())
+pos = nx.spring_layout(G, k = 0.1, iterations = 70)
+nx.draw_networkx_labels(G, pos, font_size = 9, font_family = "sans-serif", font_weight = "bold")
+nx.draw_networkx_edges(G, pos, width = 4, alpha = 0.4, edge_color = 'black')
+nx.draw_networkx_edge_labels(G, pos, neighborship_dict, label_pos = 0.3, font_size = 6)
+nx.draw(G, pos, node_size = 800, with_labels = False, node_color = 'b')
+plt.savefig('topology.png')
+#plt.show()
