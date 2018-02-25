@@ -124,6 +124,8 @@ def open_ssh_con(ip, i):
 		connection = session.invoke_shell()
 		connection.send('terminal length 0\n')
 		time.sleep(1)
+                connection.send('enable\n')
+                time.sleep(1)
 		connection.send('\n')
 		connection.send('show inventory\n')
 		time.sleep(2)
