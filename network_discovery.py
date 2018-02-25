@@ -105,7 +105,7 @@ def check_ssh_conn(ip, code = 0):
 		try:
 			session = paramiko.SSHClient()
 			session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-			session.connect(ip, username = 'teopy', password = passw)
+			session.connect(ip, username = 'admin', password = passw)
 			connection = session.invoke_shell()
 		except paramiko.AuthenticationException:
 			code = 1		
@@ -120,7 +120,7 @@ def open_ssh_con(ip, i):
 	try:         
 		session = paramiko.SSHClient()
 		session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-		session.connect(ip, username = 'teopy', password = correct_passwords[ip])
+		session.connect(ip, username = 'admin', password = correct_passwords[ip])
 		connection = session.invoke_shell()
 		connection.send('terminal length 0\n')
 		time.sleep(1)
