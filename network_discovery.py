@@ -14,33 +14,33 @@ FNULL = open(os.devnull, 'w')
 
 #Check password file validity
 def pass_is_valid():
-  global pass_dictionary
-  pass_dictionary = []
-  while True:
-    print '*Choose passwords file:'
-    print '1. Use password.txt in current directory'
-    print '2. Choose different file'
-    user_input = raw_input('\n# Type 1 or 2: ')
-    if user_input == '2' : pass_file = raw_input("\n# Enter pass file name and extension: ")
-    elif user_input == '1': pass_file = 'password.txt'
-    else:
-      print '\n* INVALID option! Please try again.\n'
-      continue
-    if os.path.isfile(pass_file) == True:
-      print "\n* Password file has been validated.\n"
-      break
+	global pass_dictionary
+	pass_dictionary = []
+	while True:
+		print '*Choose passwords file:'
+		print '1. Use password.txt in current directory'
+		print '2. Choose different file'
+		user_input = raw_input('\n# Type 1 or 2: ')
+		if user_input == '2' : pass_file = raw_input("\n# Enter pass file name and extension: ")
+		elif user_input == '1': pass_file = 'password.txt'
+		else:
+			print '\n* INVALID option! Please try again.\n'
+			continue
+		if os.path.isfile(pass_file) == True:
+			print "\n* Password file has been validated.\n"
+			break
 
-    else:
-      print "\n* File %s does not exist! Please check and try again!\n" % pass_file
-      continue
-  open_pass_file = open(pass_file, 'r')
+		else:
+			print "\n* File %s does not exist! Please check and try again!\n" % pass_file
+			continue
+	open_pass_file = open(pass_file, 'r')
 
 #Create dictionary with all passwords from file
-  for line in open_pass_file: pass_dictionary.append(line.strip('\n'))
+	for line in open_pass_file: pass_dictionary.append(line.strip('\n'))
 #Remove blank passwords
-  pass_dictionary = filter(None, pass_dictionary)
+	pass_dictionary = filter(None, pass_dictionary)
 #Remove diplicate entries
-  pass_dictionary = list(set(pass_dictionary))
+	pass_dictionary = list(set(pass_dictionary))
 		
 #Check IP range file validity
 def ip_is_valid():
@@ -67,14 +67,14 @@ def ip_is_valid():
 			print "\n* File %s does not exist! Please check and try again!\n" % range_file
 			continue
 
-#Checking octets
+	#Checking octets
 		o_range_file = open(range_file, 'r')
 		o_range_file.seek(0)
 		for line in o_range_file:
 			network_list.extend(line.strip('\n').split(','))
 		check = True
 		
-#Check reachable IP addresses
+	#Check reachable IP addresses
 		for network in network_list:
 			try:
 				a = list(ipaddress.ip_network(network).hosts())
@@ -90,7 +90,7 @@ def ip_is_valid():
 				check = False
 				break
 
-#Evaluating the 'check' flag
+	#Evaluating the 'check' flag
 		if check == False:
 			continue
 		check = True
