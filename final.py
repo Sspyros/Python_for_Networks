@@ -8,8 +8,8 @@ import re
 import os
 import ipaddress
 import socket
-import networkx as nx
-import matplotlib.pyplot as plt
+import networkx
+import matplotlib.pyplot as mplot
 
 FNULL = open(os.devnull, 'w')
 
@@ -165,7 +165,12 @@ except KeyboardInterrupt:
 correct_passwords = {}
 print '* Trying passwords from dictionary for reachable IP addresses.\n'
 for ip in valid_ip:
-	check_ssh_conn(ip)
+	try:
+		check_ssh_conn(ip)
+	
+	except KeyboardInterrupt:
+    print "\n\n* Program aborted by user. Exiting...\n"
+    sys.exit()
 
 #Remove valid IP addresses if SSH fails (removes host PCs)
 devices = {}
@@ -176,7 +181,12 @@ for ip in blacklist:
 neighbour = []
 for i, ip in enumerate(valid_ip):
 	devices.update({'device'+str(i):{'name':'', 'mgmt_ip':ip,'password':'','hw_info':'','sw_info':'','modules':'','ports':'', 'neighbors':''}})
-	open_ssh_con(ip, i)
+	try:
+		open_ssh_con(ip, i)
+	except KeyboardInterrupt:
+    print "\n\n* Program aborted by user. Exiting...\n"
+    sys.exit()
+
 	neighbour.append(devices['device' + str(i)]['neighbors'])
 
 #Create output .txt file with the information for all devices
@@ -224,20 +234,21 @@ while True:
 				print '* Ports: \n' + devices[dev]['ports'] + '\n'
 
 #Create image of network topology
-G = nx.Graph()
-neighborship_dict={}
-for router in neighbour:
-    for router_second in neighbour:
-        if router_second==router:
-            continue
-        if router[0] in router_second[1]:
-            G.add_edge(router[0],router_second[0])
+graph = networkx.Graph()
+neighborship={}
 
-G.add_edges_from(neighborship_dict.keys())
-pos = nx.spring_layout(G, k = 0.1, iterations = 70)
-nx.draw_networkx_labels(G, pos, font_size = 9, font_family = "sans-serif", font_weight = "bold")
-nx.draw_networkx_edges(G, pos, width = 4, alpha = 0.4, edge_color = 'black')
-nx.draw_networkx_edge_labels(G, pos, neighborship_dict, label_pos = 0.3, font_size = 6)
-nx.draw(G, pos, node_size = 800, with_labels = False, node_color = 'b')
-plt.savefig('topology.png')
-#plt.show()
+for router in neighbour:
+    for second_router in neighbour:
+        if second_router==router:
+            continue
+        if router[0] in second_router[1]:
+            graph.add_edge(router[0],second_router[0])
+
+graph.add_edges_from(neighborship.keys())
+pos = networkx.spring_layout(graph, k = 0.1, iterations = 70)
+networkx.draw_networkx_labels(graph, pos, font_size = 9, font_family = "sans-serif", font_weight = "bold")
+networkx.draw_networkx_edges(graph, pos, width = 4, alpha = 0.4, edge_color = 'black')
+networkx.draw_networkx_edge_labels(graph, pos, neighborship, label_pos = 0.3, font_size = 6)
+networkx.draw(graph, pos, node_size = 800, with_labels = False, node_color = 'b')
+matplot.savefig('topology.png')
+#matplot.show()
