@@ -1,5 +1,4 @@
 import paramiko
-import threading
 import os.path
 import subprocess
 import time
@@ -9,7 +8,7 @@ import os
 import ipaddress
 import socket
 import networkx
-import matplotlib.pyplot as mplot
+import matplotlib.pyplot as mtplot
 
 FNULL = open(os.devnull, 'w')
 
@@ -19,12 +18,14 @@ def pass_is_valid():
   pass_dictionary = []
   while True:
     print '*Choose passwords file:'
-    print '\n1. Use password.txt in current directory'
+    print '1. Use password.txt in current directory'
     print '2. Choose different file'
     user_input = raw_input('\n# Type 1 or 2: ')
     if user_input == '2' : pass_file = raw_input("\n# Enter pass file name and extension: ")
     elif user_input == '1': pass_file = 'password.txt'
-
+    else:
+      print '\n* INVALID option! Please try again.\n'
+      continue
     if os.path.isfile(pass_file) == True:
       print "\n* Password file has been validated.\n"
       break
@@ -51,12 +52,15 @@ def ip_is_valid():
     blacklist = []
     while True:
 			print '* Choose IP networks file:'
-			print '\n1. Use range.txt in current directory.'
+			print '1. Use range.txt in current directory.'
 			print '2. Choose different file.'
 			user_input = raw_input('\n# Type 1 or 2: ')
 			if user_input == '2' : range_file = raw_input("\n# Enter pass file name and extension: ")
 			elif user_input == '1': range_file = 'range.txt'
-
+			else:
+				print '\n* INVALID option! Please try again.\n'
+				continue
+				
 			if os.path.isfile(range_file) == True: print "\n* Password file has been validated.\n"
 			else:
 				print "\n* File %s does not exist! Please check and try again!\n" % range_file
@@ -101,7 +105,8 @@ def check_ssh_conn(ip, code = 0):
 			session.connect(ip, username = 'teopy', password = passw)
 			connection = session.invoke_shell()
 		except paramiko.AuthenticationException:
-			code = 1			
+			code = 1
+			#print 'Remote server rejected authentication for IP:' + ip			
 		except socket.error as e:
 			code = 2
 			blacklist.append(ip)
@@ -144,6 +149,73 @@ def open_ssh_con(ip, i):
                 #except socket.error, e:
 			#print 'Host down error sending the command **'
                 session.close()
+								
+def create_output_txt():
+	print '* Choose output directory:'
+	user_input = raw_input('1. Create output.txt in current folder.\n2. Choose destination name.\n\n# Type 1 or 2: ')
+	if user_input is '1': output_file = open('output.txt', 'w')
+	elif user_input is '2':
+		dst = raw_input('\n# Enter destination name: ') 
+		output_file = open(dst, 'w')
+	else:
+		print '\n INVALID option. Please try again.'
+		return 1
+	
+	for dev in devices:
+		output_file.write('* Device Name: ' +  devices[dev]['name'] + '\n')
+        	output_file.write('\n* Device IP: '+  devices['device' + str(i)]['mgmt_ip'] + '\n')
+	       	output_file.write('\n* Device Password: ' +  devices['device' + str(i)]['password'] + '\n')
+        	output_file.write('\n* Hardware Info: \n' + devices['device' + str(i)]['hw_info']  + '\n')
+  	     	output_file.write('* Software Info: \n' + devices['device' + str(i)]['sw_info'] + '\n')
+        	output_file.write('\n* Modules: \n' + '\n'.join(devices['device' + str(i)]['modules']) + '\n')
+        	output_file.write('\n* Ports: \n' + devices['device' + str(i)]['ports'] + '\n')
+		output_file.write('===================================================================\n\n')
+        	#print  devices['device' + str(i)]['neighbors']
+	output_file.close()
+
+	print('\n* Info for all devices printed to text file.\n')
+	return 0
+	
+def print_output():
+	print '* Choose option:'
+	user_input = raw_input('-Type exit to skip displaying info and proceed to create topology graph.\n-Type list to list all devices\n-Type device name to print all info about the device\n\n#')
+	if user_input == 'exit': return 0
+	if user_input == 'list': 
+		for dev in devices: 
+			print('\nDevice: ' + devices[dev]['name'] + ' with IP: ' + devices[dev]['mgmt_ip']) 
+	else:
+		for dev in devices:
+			if devices[dev]['name'] == user_input:
+				print '\n* Device Name: ' +  devices[dev]['name'] + '\n'
+				print '* Device IP: '+  devices[dev]['mgmt_ip'] + '\n'
+				print '* Device Password: ' +  devices[dev]['password'] + '\n'
+				print '* Hardware Info: \n' + devices[dev]['hw_info']  + '\n'
+				print '* Software Info: \n' + devices[dev]['sw_info'] + '\n'
+				print '* Modules: \n' + '\n'.join(devices[dev]['modules']) + '\n'
+				print '* Ports: \n' + devices[dev]['ports'] + '\n'
+	return 1
+
+def create_topology():
+	print '\n* Creating topology image.\n'
+	graph = networkx.Graph()
+	neighborship={}
+
+	for router in neighbour:
+			for second_router in neighbour:
+					if second_router==router:
+							continue
+					if router[0] in second_router[1]:
+							graph.add_edge(router[0],second_router[0])
+
+	graph.add_edges_from(neighborship.keys())
+	pos = networkx.spring_layout(graph, k = 0.1, iterations = 70)
+	networkx.draw_networkx_labels(graph, pos, font_size = 9, font_family = "sans-serif", font_weight = "bold")
+	networkx.draw_networkx_edges(graph, pos, width = 4, alpha = 0.4, edge_color = 'black')
+	networkx.draw_networkx_edge_labels(graph, pos, neighborship, label_pos = 0.3, font_size = 6)
+	networkx.draw(graph, pos, node_size = 800, with_labels = False, node_color = 'b')
+	mtplot.savefig('topology.png')
+	#mtplot.show()
+
 
 try:
     #Calling user file validity function    
@@ -161,7 +233,6 @@ except KeyboardInterrupt:
     print "\n\n* Program aborted by user. Exiting...\n"
     sys.exit()
 		
-
 correct_passwords = {}
 print '* Trying passwords from dictionary for reachable IP addresses.\n'
 for ip in valid_ip:
@@ -169,8 +240,8 @@ for ip in valid_ip:
 		check_ssh_conn(ip)
 	
 	except KeyboardInterrupt:
-    print "\n\n* Program aborted by user. Exiting...\n"
-    sys.exit()
+   		 print "\n\n* Program aborted by user. Exiting...\n"
+    		 sys.exit()
 
 #Remove valid IP addresses if SSH fails (removes host PCs)
 devices = {}
@@ -178,77 +249,35 @@ for ip in blacklist:
 	if ip in valid_ip: valid_ip.remove(ip)
 
 #Create dictionary with the information for every device
+print '* Opening SSH connection and sending commands for each device.\n'
 neighbour = []
 for i, ip in enumerate(valid_ip):
 	devices.update({'device'+str(i):{'name':'', 'mgmt_ip':ip,'password':'','hw_info':'','sw_info':'','modules':'','ports':'', 'neighbors':''}})
 	try:
 		open_ssh_con(ip, i)
 	except KeyboardInterrupt:
-    print "\n\n* Program aborted by user. Exiting...\n"
-    sys.exit()
+    		print "\n\n* Program aborted by user. Exiting...\n"
+    		sys.exit()
 
 	neighbour.append(devices['device' + str(i)]['neighbors'])
 
 #Create output .txt file with the information for all devices
-while True:
-	print '\n* Choose output directory:\n'
-	user_input = raw_input('1. Create output.txt in current folder.\n2. Choose destination name.\n\n# Type 1 or 2:\n')
-	if user_input is '1': output_file = open('output.txt', 'w')
-	elif user_input is '2':
-		dst = raw_input('\n# Enter destination name:') 
-		output_file = open(dst, 'w')
-	else: continue
-	
-	for dev in devices:
-		output_file.write('* Device Name: ' +  devices[dev]['name'] + '\n')
-        	output_file.write('* Device IP: '+  devices['device' + str(i)]['mgmt_ip'] + '\n')
-	       	output_file.write('* Device Password: ' +  devices['device' + str(i)]['password'] + '\n')
-        	output_file.write('* Hardware Info: \n' + devices['device' + str(i)]['hw_info']  + '\n')
-  	     	output_file.write('* Software Info: \n' + devices['device' + str(i)]['sw_info'] + '\n')
-        	output_file.write('* Modules: \n' + '\n'.join(devices['device' + str(i)]['modules']) + '\n')
-        	output_file.write('* Ports: \n' + devices['device' + str(i)]['ports'] + '\n')
-		output_file.write('===================================================================\n\n')
-        	#print  devices['device' + str(i)]['neighbors']
-	output_file.close()
-
-	print('\n* Info for all devices printed to text file.\n')
-	break
+try:
+	while  create_output_txt(): print''
+except KeyboardInterrupt:
+  	print "\n\n* Program aborted by user. Exiting...\n"
+  	sys.exit()
 
 #Prompt user to print information for specific device	
-while True:
-	print '\n* Choose option:\n'
-	user_input = raw_input('-Type exit to skip displaying info.\n-Type list to list all devices\n-Type device name to print all info about the device\n\n#')
-	if user_input == 'exit': break
-	if user_input == 'list': 
-		for dev in devices: 
-			print('\nDevice: ' + devices[dev]['name'] + ' with IP: ' + devices[dev]['mgmt_ip']) 
-	else:
-		for dev in devices:
-			if devices[dev]['name'] == user_input:
-				print '* Device Name: ' +  devices[dev]['name'] + '\n'
-				print '* Device IP: '+  devices[dev]['mgmt_ip'] + '\n'
-				print '* Device Password: ' +  devices[dev]['password'] + '\n'
-				print '* Hardware Info: \n' + devices[dev]['hw_info']  + '\n'
-				print '* Software Info: \n' + devices[dev]['sw_info'] + '\n'
-				print '* Modules: \n' + '\n'.join(devices[dev]['modules']) + '\n'
-				print '* Ports: \n' + devices[dev]['ports'] + '\n'
+try:
+	while print_output(): print ''
+except KeyboardInterrupt:
+  	print "\n\n* Program aborted by user. Exiting...\n"
+  	sys.exit()
 
 #Create image of network topology
-graph = networkx.Graph()
-neighborship={}
-
-for router in neighbour:
-    for second_router in neighbour:
-        if second_router==router:
-            continue
-        if router[0] in second_router[1]:
-            graph.add_edge(router[0],second_router[0])
-
-graph.add_edges_from(neighborship.keys())
-pos = networkx.spring_layout(graph, k = 0.1, iterations = 70)
-networkx.draw_networkx_labels(graph, pos, font_size = 9, font_family = "sans-serif", font_weight = "bold")
-networkx.draw_networkx_edges(graph, pos, width = 4, alpha = 0.4, edge_color = 'black')
-networkx.draw_networkx_edge_labels(graph, pos, neighborship, label_pos = 0.3, font_size = 6)
-networkx.draw(graph, pos, node_size = 800, with_labels = False, node_color = 'b')
-matplot.savefig('topology.png')
-#matplot.show()
+try:
+	create_topology()
+except KeyboardInterrupt:
+        print "\n\n* Program aborted by user. Exiting...\n"
+        sys.exit()
