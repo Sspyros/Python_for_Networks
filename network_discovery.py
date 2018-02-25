@@ -41,6 +41,7 @@ def pass_is_valid():
 	pass_dictionary = filter(None, pass_dictionary)
 #Remove diplicate entries
 	pass_dictionary = list(set(pass_dictionary))
+	open_pass_file.close()
 		
 #Check IP range file validity
 def ip_is_valid():
@@ -95,6 +96,7 @@ def ip_is_valid():
 			continue
 		check = True
 		if check == True:
+			o_range_file.close()
 			break
 
 #Check correct passwords for valid IP addresses
